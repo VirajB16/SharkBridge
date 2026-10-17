@@ -13,6 +13,7 @@ class BusinessBase(BaseModel):
     monthly_expenses_inr: Optional[float] = None
     growth_plan: Optional[str] = None
     website_url: Optional[str] = None
+    gstin: Optional[str] = None
 
     @field_validator("monthly_revenue_inr", "monthly_expenses_inr")
     @classmethod
@@ -35,6 +36,7 @@ class BusinessUpdate(BaseModel):
     monthly_expenses_inr: Optional[float] = None
     growth_plan: Optional[str] = None
     website_url: Optional[str] = None
+    gstin: Optional[str] = None
 
     @field_validator("monthly_revenue_inr", "monthly_expenses_inr")
     @classmethod

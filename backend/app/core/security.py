@@ -63,40 +63,38 @@ async def get_current_user(
             )
 
     # 2. Retrieve user profile from database
+    meta_role: UserRole = "entrepreneur"
+    meta_name = "User"
+    if hasattr(user, "user_metadata") and user.user_metadata:
+        m_r = user.user_metadata.get("role")
+        if m_r in ("entrepreneur", "investor"):
+            meta_role = m_r
+        meta_name = user.user_metadata.get("full_name") or getattr(user, "email", "User").split("@")[0]
+    elif user.id in DEMO_PROFILES:
+        meta_role = DEMO_PROFILES[user.id].get("role", meta_role)
+        meta_name = DEMO_PROFILES[user.id].get("full_name", meta_name)
+
     try:
-        profile_res = admin_sb.table("profiles").select("*").eq("id", user.id).single().execute()
-        if not profile_res.data:
-            # If profile hasn't been created yet, return partial profile
-            meta_role = "entrepreneur"
-            meta_name = "User"
-            if hasattr(user, "user_metadata") and user.user_metadata:
-                meta_role = user.user_metadata.get("role", "entrepreneur")
-                meta_name = user.user_metadata.get("full_name", user.email.split("@")[0])
-
+        profile_res = admin_sb.table("profiles").select("*").eq("id", user.id).execute()
+        if profile_res.data and len(profile_res.data) > 0:
+            data = profile_res.data[0]
             return ProfileResponse(
-                id=user.id,
-                email=user.email,
-                role=meta_role,
-                full_name=meta_name
+                id=data["id"],
+                email=data["email"],
+                role=data.get("role") or meta_role,
+                full_name=data.get("full_name") or meta_name,
+                created_at=data.get("created_at"),
+                updated_at=data.get("updated_at"),
             )
+    except Exception:
+        pass
 
-        data = profile_res.data
-        return ProfileResponse(
-            id=data["id"],
-            email=data["email"],
-            role=data["role"],
-            full_name=data["full_name"],
-            created_at=data.get("created_at"),
-            updated_at=data.get("updated_at"),
-        )
-    except Exception as ex:
-        # If table is not yet created in Supabase, create fallback profile from auth user
-        return ProfileResponse(
-            id=user.id,
-            email=getattr(user, "email", "user@example.com"),
-            role="entrepreneur",
-            full_name=getattr(user, "email", "User").split("@")[0]
-        )
+    return ProfileResponse(
+        id=user.id,
+        email=getattr(user, "email", "user@example.com"),
+        role=meta_role,
+        full_name=meta_name
+    )
 
 def require_role(required_role: UserRole):
     """

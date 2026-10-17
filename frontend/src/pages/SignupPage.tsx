@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, Briefcase, Check } from 'lucide-react';
+import { Building2, Briefcase, Check, Mail, AlertCircle } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
@@ -10,7 +10,10 @@ import { authService, isSupabaseConfigured } from '../lib/supabase';
 import { api } from '../lib/api';
 
 interface SignupPageProps {
-  onSignupSuccess?: (user: { id: string; email: string; role: UserRole; full_name: string }) => void;
+  onSignupSuccess?: (
+    user: { id: string; email: string; role: UserRole; full_name: string },
+    token?: string
+  ) => void;
 }
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
@@ -22,8 +25,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailSentTo, setEmailSentTo] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
+
+  // In-flight guard to prevent duplicate API requests (Issue 11)
+  const isSubmittingRef = useRef<boolean>(false);
 
   useEffect(() => {
     const queryRole = searchParams.get('role') as UserRole;
@@ -32,54 +41,151 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
     }
   }, [searchParams]);
 
+  // Cooldown countdown timer for 429 rate limit
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || loading || cooldownSeconds > 0) {
+      return;
+    }
+
     setError(null);
+
+    // Client-side validations (Issue 1)
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
+      setError('Full Name is required.');
+      return;
+    }
+    if (trimmedName.length < 2) {
+      setError('Full Name must be at least 2 characters long.');
+      return;
+    }
+    if (!trimmedEmail || !trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      setError('Please provide a valid email address.');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setLoading(true);
 
     try {
-      if (!fullName.trim() || !email.trim() || !password) {
-        throw new Error('Please fill in all required fields.');
-      }
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters long.');
-      }
-
       if (isSupabaseConfigured) {
-        const sessionUser = await authService.signUp(email, password, role, fullName);
+        const sessionUser = await authService.signUp(trimmedEmail, password, role, trimmedName);
+
+        // If email confirmation is required by Supabase, inform user clearly (Issue 8)
+        if (sessionUser.needsEmailConfirmation) {
+          setEmailSentTo(trimmedEmail);
+          return;
+        }
+
         if (sessionUser.token) {
           api.setToken(sessionUser.token);
-          // Sync profile to backend
+
+          // Sync profile to backend database
           try {
-            await api.createProfile({ role, full_name: fullName });
+            await api.createProfile({ role, full_name: trimmedName });
           } catch (syncErr) {
             console.warn('Backend profile sync note:', syncErr);
           }
         }
+
         if (onSignupSuccess) {
-          onSignupSuccess(sessionUser);
+          onSignupSuccess(sessionUser, sessionUser.token);
         }
         navigate(role === 'entrepreneur' ? '/entrepreneur' : '/investor');
       } else {
         // Fallback demo signup
         const demoUser = {
-          id: '00000000-0000-0000-0000-000000000001',
-          email,
+          id: role === 'entrepreneur' ? '00000000-0000-0000-0000-000000000001' : '00000000-0000-0000-0000-000000000002',
+          email: trimmedEmail,
           role,
-          full_name: fullName,
+          full_name: trimmedName,
         };
-        api.setToken(`demo-token-${role}`);
+        const token = `demo-token-${role}`;
+        api.setToken(token);
         if (onSignupSuccess) {
-          onSignupSuccess(demoUser);
+          onSignupSuccess(demoUser, token);
         }
         navigate(role === 'entrepreneur' ? '/entrepreneur' : '/investor');
       }
     } catch (err: any) {
-      setError(err.message || 'Signup failed.');
+      const msg = err.message || '';
+      const isRateLimit =
+        err.status === 429 ||
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('too many') ||
+        msg.toLowerCase().includes('over_email_send_rate_limit');
+
+      if (isRateLimit) {
+        setCooldownSeconds(60);
+        setError('Signup email rate limit exceeded (Supabase security limit). Please wait 60 seconds before trying again, or check your inbox if a confirmation email was already dispatched.');
+      } else {
+        setError(msg || 'Signup failed. Please review your details and try again.');
+      }
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
+
+  // If email confirmation is required, show confirmation screen (Issue 8)
+  if (emailSentTo) {
+    return (
+      <div className="max-w-md mx-auto py-12">
+        <Card className="text-center p-8 space-y-5">
+          <div className="w-14 h-14 rounded-full bg-teal-accent/20 text-teal-dark mx-auto flex items-center justify-center">
+            <Mail className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-[#101828]">Check Your Email</h2>
+            <p className="text-sm text-[#667085] mt-2">
+              We have sent a confirmation link to <strong className="text-gray-900">{emailSentTo}</strong>.
+            </p>
+            <p className="text-xs text-[#667085] mt-2 leading-relaxed">
+              Please click the link in the email to activate your account and securely sign in to SharkBridge.
+            </p>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100 flex flex-col gap-2.5">
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={() => navigate('/login')}
+            >
+              Go to Login Page
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full text-xs"
+              onClick={() => setEmailSentTo(null)}
+            >
+              Back to Sign Up
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-xl mx-auto py-8">
@@ -92,6 +198,15 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
 
       <Card>
         {error && <AlertBanner type="error" message={error} className="mb-4" />}
+
+        {cooldownSeconds > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+            <span>
+              Rate limit cooldown active. Please wait <strong>{cooldownSeconds}s</strong> before resubmitting.
+            </span>
+          </div>
+        )}
 
         {/* Role Selection Required by PRD */}
         <div className="mb-6">
@@ -183,8 +298,16 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
             required
           />
 
-          <Button type="submit" variant="primary" className="w-full mt-3" isLoading={loading}>
-            Create {role === 'entrepreneur' ? 'Entrepreneur' : 'Investor'} Account
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full mt-3"
+            isLoading={loading}
+            disabled={loading || cooldownSeconds > 0}
+          >
+            {cooldownSeconds > 0
+              ? `Wait ${cooldownSeconds}s to Retry`
+              : `Create ${role === 'entrepreneur' ? 'Entrepreneur' : 'Investor'} Account`}
           </Button>
         </form>
 
@@ -198,3 +321,5 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
     </div>
   );
 };
+
+export default SignupPage;

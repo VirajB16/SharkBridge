@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { SharkAssistant } from '../common/SharkAssistant';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -26,6 +27,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {children}
       </main>
       <Footer />
+      {/* 24/7 Platform Personal Assistant Guide (Issue 4) */}
+      <SharkAssistant userRole={currentUser?.role} />
     </div>
   );
 };

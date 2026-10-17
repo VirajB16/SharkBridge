@@ -30,8 +30,21 @@ export interface Business {
   monthly_expenses_inr?: number | null;
   growth_plan?: string | null;
   website_url?: string | null;
+  gstin?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface OcrResult {
+  status: string;
+  ocr_engine?: string;
+  confidence_score?: number;
+  summary: string;
+  sectors: string[];
+  ticket_size_indicator: string;
+  years_experience?: string;
+  verified_highlights?: string[];
+  preview_snippet?: string;
 }
 
 export interface InvestorPreferences {
@@ -42,6 +55,9 @@ export interface InvestorPreferences {
   max_amount_inr?: number | null;
   preferred_stages: string[];
   preferred_locations?: string[] | null;
+  cv_file_url?: string | null;
+  cv_file_name?: string | null;
+  ocr_result?: OcrResult | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +68,7 @@ export interface FundingApplication {
   entrepreneur_id: string;
   investor_id: string;
   amount_requested_inr: number;
+  equity_stake_pct?: number | null;
   use_of_funds: string;
   growth_plan: string;
   additional_notes?: string | null;
@@ -78,7 +95,29 @@ export interface MatchResult {
   max_amount_inr?: number | null;
   preferred_stages?: string[];
   location?: string | null;
+  cv_file_url?: string | null;
+  cv_file_name?: string | null;
+  ocr_result?: OcrResult | null;
   preferences?: InvestorPreferences | null;
+  business?: Business | null;
+}
+
+export interface DealMessage {
+  id: string;
+  application_id: string;
+  sender_id: string;
+  sender_name?: string | null;
+  sender_role?: 'entrepreneur' | 'investor' | string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface AssistantChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  suggested_actions?: string[];
 }
 
 export interface HealthStatus {

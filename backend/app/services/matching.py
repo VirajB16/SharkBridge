@@ -27,29 +27,26 @@ def calculate_match_score(
     else:
         reasons.append(f"Sector mismatch (+0 pts): Business operates in '{business.get('sector')}', investor targets: {', '.join(investor_pref.get('sectors') or [])}.")
 
-    # 2. Funding amount range: 30 points
-    # Use amount_requested if supplied, otherwise business monthly figures or skip
+    # 2. Funding amount capacity: 30 points (based on Maximum Ticket Size)
     req_amount = amount_requested
-    min_amt = investor_pref.get("min_amount_inr")
     max_amt = investor_pref.get("max_amount_inr")
 
     if req_amount is not None and req_amount > 0:
-        if min_amt is not None and max_amt is not None:
-            if min_amt <= req_amount <= max_amt:
+        if max_amt is not None and max_amt > 0:
+            if req_amount <= max_amt:
                 breakdown.amount_points = 30
-                reasons.append(f"Funding range fit (+30 pts): Requested ₹{req_amount:,.0f} falls within investor range (₹{min_amt:,.0f} - ₹{max_amt:,.0f}).")
+                reasons.append(f"Ticket size fit (+30 pts): Requested ₹{req_amount:,.0f} is within investor maximum ticket of ₹{max_amt:,.0f}.")
             else:
-                reasons.append(f"Funding amount outside range (+0 pts): Requested ₹{req_amount:,.0f} is outside investor range (₹{min_amt:,.0f} - ₹{max_amt:,.0f}).")
-        elif min_amt is not None and req_amount >= min_amt:
-            breakdown.amount_points = 30
-            reasons.append(f"Funding range fit (+30 pts): Requested ₹{req_amount:,.0f} meets minimum ticket of ₹{min_amt:,.0f}.")
-        elif max_amt is not None and req_amount <= max_amt:
-            breakdown.amount_points = 30
-            reasons.append(f"Funding range fit (+30 pts): Requested ₹{req_amount:,.0f} is within maximum ticket of ₹{max_amt:,.0f}.")
+                reasons.append(f"Ticket size exceeded (+0 pts): Requested ₹{req_amount:,.0f} exceeds investor maximum ticket of ₹{max_amt:,.0f}.")
         else:
-            reasons.append("Funding range unconstrained (+0 pts): Investor has not set ticket size limits.")
+            breakdown.amount_points = 30
+            reasons.append("Ticket size flexible (+30 pts): Investor has set flexible ticket size limits.")
     else:
-        reasons.append("Funding amount (+0 pts): No active application amount requested yet.")
+        if max_amt is not None and max_amt > 0:
+            breakdown.amount_points = 30
+            reasons.append(f"Ticket capacity (+30 pts): Investor backs SME investments up to ₹{max_amt:,.0f}.")
+        else:
+            reasons.append("Funding amount (+0 pts): No active application amount requested yet.")
 
     # 3. Business stage match: 20 points
     biz_stage = (business.get("stage") or "").strip().lower()

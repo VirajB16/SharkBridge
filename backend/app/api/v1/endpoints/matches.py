@@ -36,11 +36,12 @@ async def get_matches(current_user: ProfileResponse = Depends(get_current_user))
             pass
 
         if not business_data:
-            # Fallback to local store
-            for b in DEMO_BUSINESSES.values():
-                if b["owner_id"] == current_user.id or current_user.email.startswith("demo_"):
-                    business_data = b
-                    break
+            # Fallback to local store strictly for demo accounts
+            if current_user.email.startswith("demo_"):
+                for b in DEMO_BUSINESSES.values():
+                    if b["owner_id"] == current_user.id or current_user.email.startswith("demo_"):
+                        business_data = b
+                        break
 
         if not business_data:
             return []
@@ -59,7 +60,7 @@ async def get_matches(current_user: ProfileResponse = Depends(get_current_user))
         except Exception:
             pass
 
-        if not investors_list:
+        if not investors_list and current_user.email.startswith("demo_"):
             for pid, prof in DEMO_PROFILES.items():
                 if prof["role"] == "investor":
                     pref = DEMO_INVESTOR_PREFERENCES.get(pid)
@@ -90,13 +91,21 @@ async def get_matches(current_user: ProfileResponse = Depends(get_current_user))
         except Exception:
             pass
 
-        if not investor_pref:
+        if not investor_pref and current_user.id in DEMO_INVESTOR_PREFERENCES:
             investor_pref = DEMO_INVESTOR_PREFERENCES.get(current_user.id)
-            if not investor_pref and current_user.email.startswith("demo_"):
-                investor_pref = list(DEMO_INVESTOR_PREFERENCES.values())[0]
 
         if not investor_pref:
-            return []
+            if current_user.email.startswith("demo_"):
+                investor_pref = list(DEMO_INVESTOR_PREFERENCES.values())[0]
+            else:
+                # Open discovery fallback so new investors immediately see SME pipeline deals
+                investor_pref = {
+                    "investor_id": current_user.id,
+                    "sectors": [],
+                    "max_amount_inr": 100000000.0,
+                    "preferred_stages": [],
+                    "preferred_locations": []
+                }
 
         businesses_list = []
         try:
@@ -106,18 +115,24 @@ async def get_matches(current_user: ProfileResponse = Depends(get_current_user))
         except Exception:
             pass
 
-        if not businesses_list:
-            businesses_list = list(DEMO_BUSINESSES.values())
+        # Merge in any demo/local businesses not yet in DB table
+        existing_ids = {b.get("id") for b in businesses_list if isinstance(b, dict)}
+        for d_id, d_biz in DEMO_BUSINESSES.items():
+            if d_id not in existing_ids:
+                businesses_list.append(d_biz)
 
         for biz in businesses_list:
-            match_res = calculate_match_score(
-                business=biz,
-                investor_pref=investor_pref,
-            )
-            match_res.business_id = biz["id"]
-            match_res.business_name = biz["name"]
-            match_res.business = BusinessBase(**biz)
-            matches.append(match_res)
+            try:
+                match_res = calculate_match_score(
+                    business=biz,
+                    investor_pref=investor_pref,
+                )
+                match_res.business_id = biz.get("id")
+                match_res.business_name = biz.get("name")
+                match_res.business = BusinessBase(**biz)
+                matches.append(match_res)
+            except Exception:
+                continue
 
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches

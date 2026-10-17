@@ -48,6 +48,7 @@ DEMO_BUSINESSES: Dict[str, Dict[str, Any]] = {
         "monthly_expenses_inr": 380000.0,
         "growth_plan": "Expand solar refrigerated hubs to 4 additional district clusters and onboard 120 more verified grower cooperatives.",
         "website_url": "https://kisanfresh-demo.example.com",
+        "gstin": "27AABCK1234F1Z5",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -62,6 +63,8 @@ DEMO_INVESTOR_PREFERENCES: Dict[str, Dict[str, Any]] = {
         "max_amount_inr": 7500000.0,
         "preferred_stages": ["Early Growth", "Seed", "Revenue Generating"],
         "preferred_locations": ["Maharashtra", "Gujarat", "Karnataka"],
+        "cv_file_url": "https://dtbnuzuzxhgmvfzykwev.supabase.co/storage/v1/object/public/investor-cvs/demo/Apex_Ventures_Priya_Sharma_CV.pdf",
+        "cv_file_name": "Apex_Ventures_Priya_Sharma_CV.pdf",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     },
@@ -73,6 +76,8 @@ DEMO_INVESTOR_PREFERENCES: Dict[str, Dict[str, Any]] = {
         "max_amount_inr": 3000000.0,
         "preferred_stages": ["Idea", "Prototype", "Seed"],
         "preferred_locations": ["Delhi NCR", "Bangalore"],
+        "cv_file_url": "https://dtbnuzuzxhgmvfzykwev.supabase.co/storage/v1/object/public/investor-cvs/demo/Catalyst_Angel_Vikram_Mehta_CV.pdf",
+        "cv_file_name": "Catalyst_Angel_Vikram_Mehta_CV.pdf",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -85,12 +90,13 @@ DEMO_APPLICATIONS: Dict[str, Dict[str, Any]] = {
         "entrepreneur_id": DEMO_ENTREPRENEUR_ID,
         "investor_id": DEMO_INVESTOR_ID,
         "amount_requested_inr": 3500000.0,
+        "equity_stake_pct": 12.5,
         "use_of_funds": "Acquisition of 2 solar-assisted refrigeration trucks and working capital for farm depot leasing.",
         "growth_plan": "Increase monthly throughput from 25 tons to 80 tons over the next 12 months.",
         "additional_notes": "Existing contracts in place with 3 supermarket networks in Mumbai and Pune.",
         "ai_summary": (
             "**Executive Overview:** KisanFresh Logistics operates a cold-chain network connecting agricultural growers to urban retailers in Pune, Maharashtra at the Early Growth stage.\n\n"
-            "**Funding Request:** The business is requesting ₹3,500,000 to purchase 2 solar-assisted refrigeration vehicles and fund depot leases.\n\n"
+            "**Funding Request:** The business is requesting ₹3,500,000 for 12.5% equity to purchase 2 solar-assisted refrigeration vehicles and fund depot leases.\n\n"
             "**Financials:** The entrepreneur reports monthly revenue of ₹450,000 against monthly operating expenses of ₹380,000.\n\n"
             "**Growth Goals:** Expanding distribution capacity from 25 to 80 tons per month."
         ),

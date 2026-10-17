@@ -11,6 +11,13 @@ class ProfileBase(BaseModel):
 class ProfileCreate(ProfileBase):
     email: Optional[EmailStr] = None
 
+class UserRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    role: UserRole
+    full_name: str
+
+
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
 

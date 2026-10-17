@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public.businesses (
     monthly_expenses_inr NUMERIC CHECK (monthly_expenses_inr IS NULL OR monthly_expenses_inr >= 0),
     growth_plan TEXT,
     website_url TEXT,
+    gstin TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -44,6 +45,8 @@ CREATE TABLE IF NOT EXISTS public.investor_preferences (
     max_amount_inr NUMERIC CHECK (max_amount_inr IS NULL OR max_amount_inr >= 0),
     preferred_stages TEXT[] NOT NULL DEFAULT '{}',
     preferred_locations TEXT[] DEFAULT '{}',
+    cv_file_url TEXT,
+    cv_file_name TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS public.funding_applications (
     entrepreneur_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     investor_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     amount_requested_inr NUMERIC NOT NULL CHECK (amount_requested_inr > 0),
+    equity_stake_pct NUMERIC CHECK (equity_stake_pct IS NULL OR (equity_stake_pct >= 0 AND equity_stake_pct <= 100)),
     use_of_funds TEXT NOT NULL,
     growth_plan TEXT NOT NULL,
     additional_notes TEXT,
@@ -171,4 +175,29 @@ DROP TRIGGER IF EXISTS set_funding_applications_updated_at ON public.funding_app
 CREATE TRIGGER set_funding_applications_updated_at
 BEFORE UPDATE ON public.funding_applications
 FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- 9. Storage Bucket and Policies for Investor CVs
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('investor-cvs', 'investor-cvs', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Authenticated users can view investor CVs" ON storage.objects;
+CREATE POLICY "Authenticated users can view investor CVs"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'investor-cvs');
+
+DROP POLICY IF EXISTS "Investors can upload own CV" ON storage.objects;
+CREATE POLICY "Investors can upload own CV"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'investor-cvs' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Investors can update own CV" ON storage.objects;
+CREATE POLICY "Investors can update own CV"
+ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id = 'investor-cvs' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Investors can delete own CV" ON storage.objects;
+CREATE POLICY "Investors can delete own CV"
+ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id = 'investor-cvs' AND auth.uid()::text = (storage.foldername(name))[1]);
 

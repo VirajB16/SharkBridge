@@ -2,13 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.security import get_current_user, require_entrepreneur
 from app.schemas.profile import ProfileResponse
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
-from app.db.supabase import get_supabase_admin_client
+from app.db.supabase import get_supabase_admin_client, safe_supabase_insert, safe_supabase_update
 from app.services.demo_store import DEMO_BUSINESSES
 from typing import List
 from datetime import datetime, timezone
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# In-memory store for newly added fields (e.g. gstin) if DB migration hasn't been executed
+BUSINESS_EXTRAS = {}
 
 @router.post("/businesses", response_model=BusinessResponse, tags=["Businesses"])
 async def create_business(
@@ -18,10 +24,9 @@ async def create_business(
     """
     Creates a new business profile owned by the authenticated entrepreneur.
     """
-    admin_sb = get_supabase_admin_client()
     now_iso = datetime.now(timezone.utc).isoformat()
     biz_id = str(uuid.uuid4())
-    
+
     record = {
         "id": biz_id,
         "owner_id": current_user.id,
@@ -35,16 +40,22 @@ async def create_business(
         "monthly_expenses_inr": biz_in.monthly_expenses_inr,
         "growth_plan": biz_in.growth_plan,
         "website_url": biz_in.website_url,
+        "gstin": biz_in.gstin,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
 
+    if biz_in.gstin:
+        BUSINESS_EXTRAS[biz_id] = {"gstin": biz_in.gstin}
+
     try:
-        res = admin_sb.table("businesses").insert(record).execute()
-        if res.data and len(res.data) > 0:
-            return BusinessResponse(**res.data[0])
-    except Exception:
-        pass
+        data = safe_supabase_insert("businesses", record)
+        if data and len(data) > 0:
+            full_data = {**record, **data[0]}
+            DEMO_BUSINESSES[biz_id] = full_data
+            return BusinessResponse(**full_data)
+    except Exception as e:
+        logger.error(f"Error inserting business into Supabase: {e}")
 
     DEMO_BUSINESSES[biz_id] = record
     return BusinessResponse(**record)
@@ -55,27 +66,38 @@ async def list_my_businesses(
 ):
     """
     Lists all businesses owned by the authenticated entrepreneur.
+    Shows empty list for new users with no businesses.
     """
     admin_sb = get_supabase_admin_client()
 
     try:
         res = admin_sb.table("businesses").select("*").eq("owner_id", current_user.id).execute()
-        if res.data:
-            return [BusinessResponse(**item) for item in res.data]
-    except Exception:
-        pass
+        if res.data is not None and len(res.data) > 0:
+            results = []
+            for item in res.data:
+                b_dict = dict(item)
+                if b_dict.get("gstin") is None and b_dict.get("id") in BUSINESS_EXTRAS:
+                    b_dict["gstin"] = BUSINESS_EXTRAS[b_dict["id"]].get("gstin")
+                results.append(BusinessResponse(**b_dict))
+            return results
+    except Exception as e:
+        logger.error(f"Error fetching businesses from Supabase: {e}")
 
-    # Search local store
-    results = [
+    # Check in-memory store for businesses created by this entrepreneur
+    local_businesses = [
         BusinessResponse(**b)
         for b in DEMO_BUSINESSES.values()
-        if b["owner_id"] == current_user.id
+        if b.get("owner_id") == current_user.id
     ]
-    # If empty and user is demo entrepreneur, return demo business
-    if not results and current_user.email.startswith("demo_"):
-        results = [BusinessResponse(**b) for b in DEMO_BUSINESSES.values()]
+    if local_businesses:
+        return local_businesses
 
-    return results
+    # Fallback to seed demo businesses strictly for demo accounts
+    if current_user.email.startswith("demo_"):
+        return [BusinessResponse(**b) for b in DEMO_BUSINESSES.values()]
+
+    return []
+
 
 @router.get("/businesses/{business_id}", response_model=BusinessResponse, tags=["Businesses"])
 async def get_business_detail(
@@ -128,8 +150,13 @@ async def update_business(
     """
     admin_sb = get_supabase_admin_client()
     now_iso = datetime.now(timezone.utc).isoformat()
-    updates = {k: v for k, v in biz_in.dict(exclude_unset=True).items()}
+    updates = {k: v for k, v in biz_in.model_dump(exclude_unset=True).items()}
     updates["updated_at"] = now_iso
+
+    if biz_in.gstin is not None:
+        if business_id not in BUSINESS_EXTRAS:
+            BUSINESS_EXTRAS[business_id] = {}
+        BUSINESS_EXTRAS[business_id]["gstin"] = biz_in.gstin
 
     try:
         # Check ownership first
@@ -140,13 +167,20 @@ async def update_business(
                 detail="You can only update your own business profile."
             )
 
-        res = admin_sb.table("businesses").update(updates).eq("id", business_id).execute()
-        if res.data and len(res.data) > 0:
-            return BusinessResponse(**res.data[0])
+        data = safe_supabase_update("businesses", updates, "id", business_id)
+        if data and len(data) > 0:
+            res_dict = {**updates, **data[0]}
+            if biz_in.gstin is not None:
+                res_dict["gstin"] = biz_in.gstin
+            if business_id in DEMO_BUSINESSES:
+                DEMO_BUSINESSES[business_id].update(res_dict)
+            else:
+                DEMO_BUSINESSES[business_id] = res_dict
+            return BusinessResponse(**res_dict)
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Error updating business in Supabase: {e}")
 
     if business_id in DEMO_BUSINESSES:
         if DEMO_BUSINESSES[business_id]["owner_id"] != current_user.id and not current_user.email.startswith("demo_"):
@@ -161,4 +195,5 @@ async def update_business(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Business profile not found."
     )
+
 

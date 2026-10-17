@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     investors,
     matches,
     applications,
+    assistant,
 )
 
 api_router = APIRouter()
@@ -15,3 +16,4 @@ api_router.include_router(businesses.router, prefix="", tags=["Businesses"])
 api_router.include_router(investors.router, prefix="", tags=["Investors"])
 api_router.include_router(matches.router, prefix="", tags=["Matching"])
 api_router.include_router(applications.router, prefix="", tags=["Applications"])
+api_router.include_router(assistant.router, prefix="", tags=["Assistant"])

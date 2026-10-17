@@ -7,6 +7,8 @@ import {
   Sparkles,
   Edit3,
   X,
+  Globe,
+  MessageSquare,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -19,14 +21,16 @@ import { Select } from '../components/common/Select';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { api } from '../lib/api';
 import { Business, FundingApplication, MatchResult } from '../types';
+import { DealChatModal } from '../components/deal/DealChatModal';
 
 interface EntrepreneurDashboardProps {
   user?: any;
 }
 
-export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () => {
+export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = ({ user }) => {
   const [business, setBusiness] = useState<Business | null>(null);
   const [applications, setApplications] = useState<FundingApplication[]>([]);
+  const [dealChatApp, setDealChatApp] = useState<FundingApplication | null>(null);
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +41,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
   const [selectedApp, setSelectedApp] = useState<FundingApplication | null>(null);
   const [preselectedInvestorId, setPreselectedInvestorId] = useState<string>('');
 
-  // Business Form State
+  // Business Form State (Issue 1 & 2: mandatory fields validated, Website & GSTIN optional)
   const [bizForm, setBizForm] = useState({
     name: '',
     sector: '',
@@ -49,17 +53,18 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
     monthly_expenses_inr: '',
     growth_plan: '',
     website_url: '',
+    gstin: '',
   });
   const [bizSubmitting, setBizSubmitting] = useState(false);
   const [bizFormError, setBizFormError] = useState<string | null>(null);
 
-  // Application Form State
+  // Application Form State (Issue 2 & 5: equity stake added, additional notes removed)
   const [appForm, setAppForm] = useState({
     investor_id: '',
     amount_requested_inr: '',
+    equity_stake_pct: '',
     use_of_funds: '',
     growth_plan: '',
-    additional_notes: '',
     confirmation: false,
   });
   const [appSubmitting, setAppSubmitting] = useState(false);
@@ -85,14 +90,17 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
           monthly_expenses_inr: bizList[0].monthly_expenses_inr?.toString() || '',
           growth_plan: bizList[0].growth_plan || '',
           website_url: bizList[0].website_url || '',
+          gstin: bizList[0].gstin || '',
         });
+      } else {
+        setBusiness(null);
       }
 
-      // 2. Fetch applications
+      // 2. Fetch applications (returns actual database records, 0 for new users)
       const apps = await api.getMyApplications();
       setApplications(apps || []);
 
-      // 3. Fetch matched investors
+      // 3. Fetch matched investors (returns 0 for new users with no profile)
       const matchResults = await api.getMatches();
       setMatches(matchResults || []);
     } catch (err: any) {
@@ -106,36 +114,80 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
     loadData();
   }, []);
 
-  // Save or Update Business
+  // Save or Update Business (Issue 1 & 2: validate mandatory fields, keep GSTIN and Website optional)
   const handleSaveBusiness = async (e: React.FormEvent) => {
     e.preventDefault();
     setBizFormError(null);
+
+    // Mandatory validations
+    if (!bizForm.name.trim()) {
+      setBizFormError('Business Name is required.');
+      return;
+    }
+    if (!bizForm.sector.trim()) {
+      setBizFormError('Sector / Industry is required.');
+      return;
+    }
+    if (!bizForm.stage) {
+      setBizFormError('Business Stage is required.');
+      return;
+    }
+    if (!bizForm.description.trim()) {
+      setBizFormError('Short Description is required.');
+      return;
+    }
+
     setBizSubmitting(true);
 
     try {
       const payload: Partial<Business> = {
-        name: bizForm.name,
-        sector: bizForm.sector,
-        description: bizForm.description,
+        name: bizForm.name.trim(),
+        sector: bizForm.sector.trim(),
+        description: bizForm.description.trim(),
         stage: bizForm.stage,
-        location: bizForm.location || null,
-        target_customers: bizForm.target_customers || null,
+        location: bizForm.location.trim() || null,
+        target_customers: bizForm.target_customers.trim() || null,
         monthly_revenue_inr: bizForm.monthly_revenue_inr ? parseFloat(bizForm.monthly_revenue_inr) : null,
         monthly_expenses_inr: bizForm.monthly_expenses_inr ? parseFloat(bizForm.monthly_expenses_inr) : null,
-        growth_plan: bizForm.growth_plan || null,
-        website_url: bizForm.website_url || null,
+        growth_plan: bizForm.growth_plan.trim() || null,
+        website_url: bizForm.website_url.trim() || null,
+        gstin: bizForm.gstin.trim() || null,
       };
 
+      let savedBiz: Business;
       if (business) {
-        const updated = await api.updateBusiness(business.id, payload);
-        setBusiness(updated);
+        savedBiz = await api.updateBusiness(business.id, payload);
       } else {
-        const created = await api.createBusiness(payload);
-        setBusiness(created);
+        savedBiz = await api.createBusiness(payload);
       }
 
+      setBusiness(savedBiz);
+      setBizForm({
+        name: savedBiz.name || '',
+        sector: savedBiz.sector || '',
+        description: savedBiz.description || '',
+        stage: savedBiz.stage || 'Early Growth',
+        location: savedBiz.location || '',
+        target_customers: savedBiz.target_customers || '',
+        monthly_revenue_inr: savedBiz.monthly_revenue_inr?.toString() || '',
+        monthly_expenses_inr: savedBiz.monthly_expenses_inr?.toString() || '',
+        growth_plan: savedBiz.growth_plan || '',
+        website_url: savedBiz.website_url || '',
+        gstin: savedBiz.gstin || '',
+      });
       setIsBizModalOpen(false);
-      loadData(); // refresh matches based on updated profile
+
+      // Refresh matches and applications based on new profile
+      try {
+        const [apps, matchResults] = await Promise.all([
+          api.getMyApplications(),
+          api.getMatches(),
+        ]);
+        setApplications(apps || []);
+        setMatches(matchResults || []);
+      } catch (refreshErr) {
+        console.warn('Background refresh note:', refreshErr);
+      }
     } catch (err: any) {
       setBizFormError(err.message || 'Failed to save business profile.');
     } finally {
@@ -143,7 +195,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
     }
   };
 
-  // Submit Application
+  // Submit Application (Issue 2 & 6: equity stake %, no additional notes, valid schema payload)
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     setAppFormError(null);
@@ -156,6 +208,27 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
       setAppFormError('Please select a target investor.');
       return;
     }
+
+    const amt = parseFloat(appForm.amount_requested_inr);
+    if (isNaN(amt) || amt <= 0) {
+      setAppFormError('Please enter a valid funding amount greater than ₹0.');
+      return;
+    }
+
+    const equity = parseFloat(appForm.equity_stake_pct);
+    if (isNaN(equity) || equity <= 0 || equity > 100) {
+      setAppFormError('Please enter a valid equity stake percentage between 0.1% and 100%.');
+      return;
+    }
+
+    if (!appForm.use_of_funds.trim()) {
+      setAppFormError('Intended Use of Funds is required.');
+      return;
+    }
+    if (!appForm.growth_plan.trim()) {
+      setAppFormError('Growth Plan & Milestones is required.');
+      return;
+    }
     if (!appForm.confirmation) {
       setAppFormError('You must confirm that submitted information is accurate.');
       return;
@@ -163,18 +236,13 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
 
     setAppSubmitting(true);
     try {
-      const amt = parseFloat(appForm.amount_requested_inr);
-      if (isNaN(amt) || amt <= 0) {
-        throw new Error('Please enter a valid funding amount greater than ₹0.');
-      }
-
       const newApp = await api.submitApplication({
         business_id: business.id,
         investor_id: appForm.investor_id,
         amount_requested_inr: amt,
-        use_of_funds: appForm.use_of_funds,
-        growth_plan: appForm.growth_plan,
-        additional_notes: appForm.additional_notes || undefined,
+        equity_stake_pct: equity,
+        use_of_funds: appForm.use_of_funds.trim(),
+        growth_plan: appForm.growth_plan.trim(),
         confirmation: true,
       });
 
@@ -184,9 +252,9 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
       setAppForm({
         investor_id: '',
         amount_requested_inr: '',
+        equity_stake_pct: '',
         use_of_funds: '',
         growth_plan: '',
-        additional_notes: '',
         confirmation: false,
       });
     } catch (err: any) {
@@ -250,7 +318,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
         }
       />
 
-      {/* Summary Stat Cards */}
+      {/* Summary Stat Cards (Issue 4: actual database calculations, zero for new users) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <Card className="p-5">
           <div className="flex items-center justify-between">
@@ -259,7 +327,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
             </span>
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                business ? 'bg-emerald-500' : 'bg-amber-500'
+                business ? 'bg-emerald-500' : 'bg-gray-400'
               }`}
             />
           </div>
@@ -268,7 +336,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
               {business ? business.name : 'Not Created'}
             </span>
             <span className="text-xs text-[#667085]">
-              {business ? business.stage : 'Click to create'}
+              {business ? business.stage : '0 businesses'}
             </span>
           </div>
         </Card>
@@ -300,7 +368,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
         </Card>
       </div>
 
-      {/* Business Details Card (if created) */}
+      {/* Business Details Card (if created) (Issue 2: display optional GSTIN) */}
       {business ? (
         <Card
           title={business.name}
@@ -321,6 +389,27 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                   <h4 className="font-semibold text-gray-900 mb-1">Target Customers</h4>
                   <p className="text-gray-600 leading-relaxed mb-4">{business.target_customers}</p>
                 </>
+              )}
+
+              {business.gstin && (
+                <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 text-xs text-gray-700 mb-2">
+                  <span className="font-semibold text-gray-900">GSTIN:</span>{' '}
+                  <span className="font-mono text-gray-800">{business.gstin}</span>
+                </div>
+              )}
+
+              {business.website_url && (
+                <div className="mt-2">
+                  <a
+                    href={business.website_url.startsWith('http') ? business.website_url : `https://${business.website_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-teal-dark hover:underline font-medium"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>{business.website_url}</span>
+                  </a>
+                </div>
               )}
             </div>
 
@@ -366,7 +455,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
         </Card>
       )}
 
-      {/* Matched Investors Discovery Section */}
+      {/* Matched Investors Discovery Section (Issue 9: CV view/download, Issue 10: Maximum ticket size only) */}
       <Card
         title="Investor Matches"
         subtitle="Transparent recommendations scored by sector fit, ticket size, stage, and location"
@@ -412,10 +501,11 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                         <strong>Target Sectors:</strong>{' '}
                         {m.preferences.sectors?.join(', ') || 'General'}
                       </div>
+                      {/* Issue 10: Maximum ticket size retained, minimum ticket size removed */}
                       <div>
-                        <strong>Ticket Range:</strong>{' '}
-                        {m.preferences.min_amount_inr != null && m.preferences.max_amount_inr != null
-                          ? `₹${m.preferences.min_amount_inr.toLocaleString()} - ₹${m.preferences.max_amount_inr.toLocaleString()}`
+                        <strong>Maximum Ticket Size:</strong>{' '}
+                        {m.preferences.max_amount_inr != null
+                          ? `Up to ₹${m.preferences.max_amount_inr.toLocaleString()}`
                           : 'Flexible'}
                       </div>
                       <div>
@@ -424,6 +514,25 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                       </div>
                     </div>
                   )}
+
+                  {/* Issue 9: View/Download Investor CV before applying */}
+                  <div className="my-2.5">
+                    {m.preferences?.cv_file_url ? (
+                      <a
+                        href={m.preferences.cv_file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-teal-dark hover:underline font-semibold bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200/60"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-teal-dark" />
+                        <span>View Verified Investor CV ({m.preferences.cv_file_name || 'Document'})</span>
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 italic">
+                        Investor credentials on file
+                      </span>
+                    )}
+                  </div>
 
                   <div className="p-3 bg-gray-50 rounded-lg text-xs space-y-1.5 mb-4 border border-gray-100">
                     <span className="font-semibold text-gray-800 block">Match Explanation:</span>
@@ -450,7 +559,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
         )}
       </Card>
 
-      {/* Applications List */}
+      {/* Applications List (Issue 2: display equity stake offered %) */}
       <Card
         title="Submitted Applications"
         subtitle="Track application progress and review status updated by investors"
@@ -471,6 +580,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                   <th className="px-4 py-3">Business</th>
                   <th className="px-4 py-3">Target Investor</th>
                   <th className="px-4 py-3">Requested (INR)</th>
+                  <th className="px-4 py-3">Equity Offered</th>
                   <th className="px-4 py-3">Submitted</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Details</th>
@@ -483,10 +593,13 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                       {app.business?.name || business?.name || 'My Business'}
                     </td>
                     <td className="px-4 py-3 text-gray-700">
-                      {app.investor?.full_name || 'Apex Ventures'}
+                      {app.investor?.full_name || 'Target Investor'}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">
                       ₹{app.amount_requested_inr.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-teal-dark">
+                      {app.equity_stake_pct != null ? `${app.equity_stake_pct}%` : '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {app.created_at ? new Date(app.created_at).toLocaleDateString() : 'Recent'}
@@ -495,13 +608,26 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                       <StatusChip status={app.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedApp(app)}
-                      >
-                        View AI Summary
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        {app.status === 'interested' && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="bg-[#101828] hover:bg-gray-900 text-white flex items-center gap-1 shadow-xs text-xs"
+                            onClick={() => setDealChatApp(app)}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-teal-accent" />
+                            <span>Deal Chat</span>
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedApp(app)}
+                        >
+                          View AI Summary
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -513,6 +639,8 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
 
       {/* ========================================================= */}
       {/* MODAL 1: Business Profile Form */}
+      {/* Issue 1: Mandatory fields marked with *, Website & GSTIN optional */}
+      {/* Issue 3: Scaling removed from stages */}
       {/* ========================================================= */}
       {isBizModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -550,6 +678,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Issue 3: Scaling removed from business stages */}
                 <Select
                   label="Business Stage"
                   required
@@ -559,12 +688,11 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                     { value: 'Idea', label: 'Idea / Concept' },
                     { value: 'Prototype', label: 'Prototype / Pre-launch' },
                     { value: 'Early Growth', label: 'Early Growth (Generating Sales)' },
-                    { value: 'Scaling', label: 'Scaling' },
                     { value: 'Mature', label: 'Mature / Established' },
                   ]}
                 />
                 <Input
-                  label="Operating Location"
+                  label="Operating Location (Optional)"
                   value={bizForm.location}
                   onChange={(e) => setBizForm({ ...bizForm, location: e.target.value })}
                   placeholder="e.g. Pune, Maharashtra"
@@ -581,7 +709,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
               />
 
               <Input
-                label="Target Customers"
+                label="Target Customers (Optional)"
                 value={bizForm.target_customers}
                 onChange={(e) => setBizForm({ ...bizForm, target_customers: e.target.value })}
                 placeholder="e.g. Perishable crop farmers and urban grocery chains"
@@ -589,42 +717,54 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Monthly Revenue (INR)"
+                  label="Monthly Revenue (INR) (Optional)"
                   type="number"
                   min="0"
                   prefixText="₹"
                   value={bizForm.monthly_revenue_inr}
                   onChange={(e) => setBizForm({ ...bizForm, monthly_revenue_inr: e.target.value })}
                   placeholder="e.g. 450000"
-                  helperText="Optional; leave blank if pre-revenue"
+                  helperText="Leave blank if pre-revenue"
                 />
                 <Input
-                  label="Monthly Expenses (INR)"
+                  label="Monthly Expenses (INR) (Optional)"
                   type="number"
                   min="0"
                   prefixText="₹"
                   value={bizForm.monthly_expenses_inr}
                   onChange={(e) => setBizForm({ ...bizForm, monthly_expenses_inr: e.target.value })}
                   placeholder="e.g. 380000"
-                  helperText="Optional"
+                  helperText="Leave blank if unknown"
                 />
               </div>
 
               <Textarea
-                label="Growth Plan & Milestones"
+                label="Growth Plan & Milestones (Optional)"
                 rows={3}
                 value={bizForm.growth_plan}
                 onChange={(e) => setBizForm({ ...bizForm, growth_plan: e.target.value })}
                 placeholder="How do you plan to scale operations over the next 12-24 months?"
               />
 
-              <Input
-                label="Website or Social Link (Optional)"
-                type="url"
-                value={bizForm.website_url}
-                onChange={(e) => setBizForm({ ...bizForm, website_url: e.target.value })}
-                placeholder="https://example.com"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Issue 1 & 2: GSTIN is optional */}
+                <Input
+                  label="GSTIN (Optional)"
+                  value={bizForm.gstin}
+                  onChange={(e) => setBizForm({ ...bizForm, gstin: e.target.value })}
+                  placeholder="e.g. 27ABCDE1234F1Z5"
+                  helperText="15-character Goods and Services Tax Identification Number"
+                />
+
+                {/* Issue 1: Website is optional */}
+                <Input
+                  label="Website or Social Link (Optional)"
+                  type="url"
+                  value={bizForm.website_url}
+                  onChange={(e) => setBizForm({ ...bizForm, website_url: e.target.value })}
+                  placeholder="https://example.com"
+                />
+              </div>
 
               <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
                 <Button
@@ -645,6 +785,8 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
 
       {/* ========================================================= */}
       {/* MODAL 2: New Funding Application Form */}
+      {/* Issue 2: Equity Stake Offered (%) added */}
+      {/* Issue 5: Additional Notes removed */}
       {/* ========================================================= */}
       {isApplyModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -679,17 +821,33 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                 }))}
               />
 
-              <Input
-                label="Funding Amount Requested (INR)"
-                type="number"
-                required
-                min="1"
-                prefixText="₹"
-                value={appForm.amount_requested_inr}
-                onChange={(e) => setAppForm({ ...appForm, amount_requested_inr: e.target.value })}
-                placeholder="e.g. 2500000"
-                helperText="Specify total capital required in INR"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Funding Amount Requested (INR)"
+                  type="number"
+                  required
+                  min="1"
+                  prefixText="₹"
+                  value={appForm.amount_requested_inr}
+                  onChange={(e) => setAppForm({ ...appForm, amount_requested_inr: e.target.value })}
+                  placeholder="e.g. 2500000"
+                  helperText="Total capital required in INR"
+                />
+
+                {/* Issue 2: Equity Stake Offered (%) field */}
+                <Input
+                  label="Equity Stake Offered (%)"
+                  type="number"
+                  required
+                  min="0.1"
+                  max="100"
+                  step="0.1"
+                  value={appForm.equity_stake_pct}
+                  onChange={(e) => setAppForm({ ...appForm, equity_stake_pct: e.target.value })}
+                  placeholder="e.g. 5.0"
+                  helperText="0.1% to 100% company equity"
+                />
+              </div>
 
               <Textarea
                 label="Intended Use of Funds"
@@ -709,14 +867,6 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                 placeholder="e.g. Reach 80 tons monthly distribution throughput within 9 months of capital deployment."
               />
 
-              <Textarea
-                label="Additional Notes (Optional)"
-                rows={2}
-                value={appForm.additional_notes}
-                onChange={(e) => setAppForm({ ...appForm, additional_notes: e.target.value })}
-                placeholder="Any existing contracts, letters of intent, or certifications?"
-              />
-
               <div className="pt-2">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -727,7 +877,7 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                     className="mt-1 w-4 h-4 rounded text-[#101828] border-gray-300 focus:ring-[#101828]"
                   />
                   <span className="text-xs text-gray-700 leading-normal">
-                    I confirm that the submitted business and financial information is accurate to the best of my knowledge. I understand that AI summaries are informational and do not guarantee funding.
+                    I confirm that the submitted business and financial information is accurate to the best of my knowledge. I understand that AI summaries are informational and do not guarantee funding. <span className="text-[#C43232]">*</span>
                   </span>
                 </label>
               </div>
@@ -816,11 +966,17 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
 
             {/* Application Data Details */}
             <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
+              <div className="grid grid-cols-3 gap-3 p-4 bg-gray-50 rounded-xl">
                 <div>
                   <span className="text-xs text-gray-500 block">Requested Amount</span>
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-base font-bold text-gray-900">
                     ₹{selectedApp.amount_requested_inr.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 block">Equity Stake</span>
+                  <span className="text-base font-bold text-teal-dark">
+                    {selectedApp.equity_stake_pct != null ? `${selectedApp.equity_stake_pct}%` : 'Not specified'}
                   </span>
                 </div>
                 <div>
@@ -844,15 +1000,6 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
                   {selectedApp.growth_plan}
                 </p>
               </div>
-
-              {selectedApp.additional_notes && (
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Additional Notes</h4>
-                  <p className="text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg text-xs sm:text-sm">
-                    {selectedApp.additional_notes}
-                  </p>
-                </div>
-              )}
             </div>
 
             <div className="pt-4 border-t border-gray-100 flex justify-end">
@@ -863,6 +1010,18 @@ export const EntrepreneurDashboard: React.FC<EntrepreneurDashboardProps> = () =>
           </div>
         </div>
       )}
+
+      {/* End-to-End Encrypted Deal Room Planning Chat Modal (Issue 5) */}
+      {dealChatApp && (
+        <DealChatModal
+          application={dealChatApp}
+          currentUserRole="entrepreneur"
+          currentUserId={user?.id}
+          onClose={() => setDealChatApp(null)}
+        />
+      )}
     </div>
   );
 };
+
+export default EntrepreneurDashboard;

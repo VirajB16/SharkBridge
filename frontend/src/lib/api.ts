@@ -5,6 +5,8 @@ import {
   InvestorPreferences,
   FundingApplication,
   MatchResult,
+  DealMessage,
+  OcrResult,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -51,7 +53,13 @@ class ApiClient {
       let errorMessage = `HTTP error ${response.status}`;
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((err: any) => err.msg || JSON.stringify(err)).join('; ');
+        } else if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
       } catch {
         // Fallback to generic message
       }
@@ -65,7 +73,14 @@ class ApiClient {
     return this.request<HealthStatus>('/api/v1/health');
   }
 
-  // Profile Endpoints
+  // Profile & Auth Endpoints
+  async register(data: { email: string; password: string; role: string; full_name: string }): Promise<Profile> {
+    return this.request<Profile>('/api/v1/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getMe(): Promise<Profile> {
     return this.request<Profile>('/api/v1/me');
   }
@@ -77,7 +92,7 @@ class ApiClient {
     });
   }
 
-  async getInvestors(): Promise<Array<{ id: string; full_name: string; email: string; preferences?: InvestorPreferences }>> {
+  async getInvestors(): Promise<Array<{ id: string; full_name: string; email: string; cv_file_url?: string; cv_file_name?: string; preferences?: InvestorPreferences }>> {
     return this.request('/api/v1/investors');
   }
 
@@ -116,6 +131,45 @@ class ApiClient {
     });
   }
 
+  async uploadInvestorCv(file: File): Promise<{ status: string; cv_file_url: string; cv_file_name: string; ocr_result?: OcrResult }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/investor/cv`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Upload failed with status ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((err: any) => err.msg || JSON.stringify(err)).join('; ');
+        } else if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // Fallback
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.json();
+  }
+
+  async getInvestorCv(investorId: string): Promise<{ investor_id: string; cv_file_url: string; cv_file_name: string }> {
+    return this.request<{ investor_id: string; cv_file_url: string; cv_file_name: string }>(`/api/v1/investor/${investorId}/cv`);
+  }
+
   // Matches Endpoints
   async getMatches(): Promise<MatchResult[]> {
     return this.request<MatchResult[]>('/api/v1/matches');
@@ -134,10 +188,11 @@ class ApiClient {
     business_id: string;
     investor_id: string;
     amount_requested_inr: number;
+    equity_stake_pct?: number;
     use_of_funds: string;
     growth_plan: string;
     additional_notes?: string;
-    confirmation: boolean;
+    confirmation?: boolean;
   }): Promise<FundingApplication> {
     return this.request<FundingApplication>('/api/v1/applications', {
       method: 'POST',
@@ -157,6 +212,27 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  // Deal Planning Chat Endpoints (Issue 5: Unlocked when accepted/interested)
+  async getDealMessages(applicationId: string): Promise<DealMessage[]> {
+    return this.request<DealMessage[]>(`/api/v1/applications/${applicationId}/messages`);
+  }
+
+  async sendDealMessage(applicationId: string, content: string): Promise<DealMessage> {
+    return this.request<DealMessage>(`/api/v1/applications/${applicationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  // Platform Guide Chatbot (Issue 4)
+  async askAssistant(message: string, role?: string, history?: any[]): Promise<{ reply: string; suggested_actions?: string[] }> {
+    return this.request<{ reply: string; suggested_actions?: string[] }>('/api/v1/assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, role, history }),
+    });
+  }
 }
 
 export const api = new ApiClient();
+

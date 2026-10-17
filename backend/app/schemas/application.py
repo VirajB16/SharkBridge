@@ -17,10 +17,11 @@ class ApplicationCreate(BaseModel):
     business_id: str
     investor_id: str
     amount_requested_inr: float = Field(..., gt=0, description="Funding amount requested in INR; must be > 0")
-    use_of_funds: str = Field(..., min_length=5, description="Intended purpose of funds")
-    growth_plan: str = Field(..., min_length=5, description="Growth and milestone plan")
+    equity_stake_pct: Optional[float] = Field(None, ge=0, le=100, description="Equity stake percentage offered (0-100%)")
+    use_of_funds: str = Field(..., min_length=1, description="Intended purpose of funds")
+    growth_plan: str = Field(..., min_length=1, description="Growth and milestone plan")
     additional_notes: Optional[str] = None
-    confirmation: bool = Field(..., description="Confirmation that submitted information is accurate")
+    confirmation: bool = Field(default=True, description="Confirmation that submitted information is accurate")
 
     @field_validator("confirmation")
     @classmethod
@@ -38,6 +39,7 @@ class ApplicationResponse(BaseModel):
     entrepreneur_id: str
     investor_id: str
     amount_requested_inr: float
+    equity_stake_pct: Optional[float] = None
     use_of_funds: str
     growth_plan: str
     additional_notes: Optional[str] = None
@@ -51,6 +53,21 @@ class ApplicationResponse(BaseModel):
     business: Optional[BusinessResponse] = None
     entrepreneur: Optional[ProfileResponse] = None
     investor: Optional[ProfileResponse] = None
+
+    class Config:
+        from_attributes = True
+
+class DealMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000, description="Chat message content")
+
+class DealMessageResponse(BaseModel):
+    id: str
+    application_id: str
+    sender_id: str
+    sender_name: Optional[str] = None
+    sender_role: Optional[str] = None
+    content: str
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

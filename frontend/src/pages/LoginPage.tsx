@@ -9,7 +9,10 @@ import { api } from '../lib/api';
 import { Building2, Briefcase, Zap } from 'lucide-react';
 
 interface LoginPageProps {
-  onLoginSuccess?: (user: { id: string; email: string; role: 'entrepreneur' | 'investor'; full_name: string }) => void;
+  onLoginSuccess?: (
+    user: { id: string; email: string; role: 'entrepreneur' | 'investor'; full_name: string },
+    token?: string
+  ) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -22,28 +25,47 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError('Please enter both your email address and password.');
+      return;
+    }
+    if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (!email || !password) {
-        throw new Error('Please enter both email and password.');
-      }
-
       if (isSupabaseConfigured) {
-        const sessionUser = await authService.signIn(email, password);
+        const sessionUser = await authService.signIn(trimmedEmail, password);
         if (sessionUser.token) {
           api.setToken(sessionUser.token);
         }
         if (onLoginSuccess) {
-          onLoginSuccess(sessionUser);
+          onLoginSuccess(sessionUser, sessionUser.token);
         }
         navigate(sessionUser.role === 'entrepreneur' ? '/entrepreneur' : '/investor');
       } else {
         // Fallback demo login
-        handleDemoLogin(email.toLowerCase().includes('investor') ? 'investor' : 'entrepreneur');
+        handleDemoLogin(trimmedEmail.toLowerCase().includes('investor') ? 'investor' : 'entrepreneur');
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please verify your credentials.');
+      const msg = err.message || '';
+      if (
+        err.status === 429 ||
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('too many') ||
+        msg.toLowerCase().includes('over_email_send_rate_limit')
+      ) {
+        setError('Too many requests. Please wait a moment before trying to log in again.');
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        setError('Your email has not been confirmed yet. Please check your inbox for the confirmation link.');
+      } else {
+        setError(msg || 'Login failed. Please verify your email and password.');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,7 +83,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     };
 
     if (onLoginSuccess) {
-      onLoginSuccess(user);
+      onLoginSuccess(user, demoToken);
     }
     navigate(role === 'entrepreneur' ? '/entrepreneur' : '/investor');
   };
