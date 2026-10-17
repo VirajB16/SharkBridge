@@ -5,6 +5,7 @@ import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { AlertBanner } from '../components/common/AlertBanner';
+import { SharkBridgeLogo } from '../components/common/SharkBridgeLogo';
 import { UserRole } from '../types';
 import { authService, isSupabaseConfigured } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -189,7 +190,8 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess }) => {
 
   return (
     <div className="max-w-xl mx-auto py-8">
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 flex flex-col items-center">
+        <SharkBridgeLogo size="lg" className="mb-3" />
         <h1 className="text-2xl sm:text-3xl font-bold text-[#101828]">Create Your Account</h1>
         <p className="text-sm text-[#667085] mt-1.5">
           Join SharkBridge to discover funding opportunities or evaluate vetted SMEs.

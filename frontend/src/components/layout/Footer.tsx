@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { SharkBridgeLogo } from '../common/SharkBridgeLogo';
 
 export const Footer: React.FC = () => {
   return (
@@ -7,9 +8,7 @@ export const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-[#101828] flex items-center justify-center text-[#22C7C9] font-bold text-xs">
-              SB
-            </div>
+            <SharkBridgeLogo size="sm" />
             <span className="font-semibold text-sm text-[#101828]">
               SharkBridge Platform
             </span>

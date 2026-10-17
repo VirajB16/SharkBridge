@@ -4,6 +4,7 @@ import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { AlertBanner } from '../components/common/AlertBanner';
+import { SharkBridgeLogo } from '../components/common/SharkBridgeLogo';
 import { authService, isSupabaseConfigured } from '../lib/supabase';
 import { api } from '../lib/api';
 import { Building2, Briefcase, Zap } from 'lucide-react';
@@ -90,7 +91,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="max-w-md mx-auto py-10">
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 flex flex-col items-center">
+        <SharkBridgeLogo size="lg" className="mb-3" />
         <h1 className="text-2xl font-bold text-[#101828]">Welcome Back</h1>
         <p className="text-sm text-[#667085] mt-1">
           Log in to manage funding applications and investor evaluations.

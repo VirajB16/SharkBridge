@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, ArrowRight, User } from 'lucide-react';
 import { Button } from '../common/Button';
+import { SharkBridgeLogo } from '../common/SharkBridgeLogo';
 
 interface NavbarProps {
   currentUser?: {
@@ -23,17 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentUser, onLogout, apiHealth
           {/* Logo */}
           <div className="flex items-center gap-3">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-lg bg-[#101828] flex items-center justify-center text-[#22C7C9] font-bold text-lg shadow-sm transition-transform group-hover:scale-105">
-                SB
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-lg tracking-tight text-[#101828] leading-tight">
-                  Shark<span className="text-[#22C7C9]">Bridge</span>
-                </span>
-                <span className="text-[10px] text-[#667085] font-medium tracking-wide">
-                  SME FUNDING MATCH
-                </span>
-              </div>
+              <SharkBridgeLogo size="md" showText={true} />
             </Link>
 
             {/* Health Pill (Dev/Demo aid) */}

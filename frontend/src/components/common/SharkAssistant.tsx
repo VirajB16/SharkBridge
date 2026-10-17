@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Sparkles, Bot, ChevronDown } from 'lucide-react';
+import { X, Send, Sparkles, ChevronDown } from 'lucide-react';
+import logoImg from '../../assets/sharkbridge-logo.png';
 import { api } from '../../lib/api';
 import { AssistantChatMessage } from '../../types';
 
@@ -130,8 +131,8 @@ export const SharkAssistant: React.FC<SharkAssistantProps> = ({ userRole = 'entr
           aria-label="Open SharkBridge Guide"
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#101828] text-white shadow-xl hover:bg-gray-900 hover:scale-105 active:scale-95 transition-all group border border-teal-dark/30"
         >
-          <div className="w-6 h-6 rounded-full bg-teal-accent text-[#101828] flex items-center justify-center">
-            <Bot className="w-3.5 h-3.5" />
+          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center p-0.5 shadow-sm">
+            <img src={logoImg} alt="SharkBot" className="w-4 h-4 object-contain" />
           </div>
           <span className="text-xs font-semibold tracking-wide">SharkBridge Guide</span>
           <span className="relative flex h-2 w-2">
@@ -147,8 +148,8 @@ export const SharkAssistant: React.FC<SharkAssistantProps> = ({ userRole = 'entr
           {/* Header */}
           <div className="bg-[#101828] text-white px-4 py-3 flex items-center justify-between border-b border-gray-800">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-teal-accent text-[#101828] flex items-center justify-center font-bold">
-                <Bot className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center p-1 shadow-sm">
+                <img src={logoImg} alt="SharkBot" className="w-6 h-6 object-contain" />
               </div>
               <div>
                 <h3 className="font-bold text-xs sm:text-sm text-white flex items-center gap-1.5">
