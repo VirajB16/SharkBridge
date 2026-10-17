@@ -368,6 +368,34 @@ def test_deal_room_chat_access_control():
     assert len(msgs_list) >= 1
     assert any(m["content"] == "Hello! Glad to connect on SharkBridge deal room." for m in msgs_list)
 
+@pytest.mark.asyncio
+async def test_socket_io_deal_room_events():
+    """Verify Socket.IO deal room handlers and broadcast engine"""
+    from app.core.socket_server import handle_join_deal_room, handle_leave_deal_room, broadcast_deal_message, sio
+
+    test_app_id = "test-socket-app-123"
+    fake_sid = "test-sid-999"
+
+    # Test joining deal room
+    join_res = await handle_join_deal_room(fake_sid, {"application_id": test_app_id})
+    assert join_res["status"] == "ok"
+    assert join_res["room"] == f"deal_{test_app_id}"
+
+    # Test broadcasting a deal message
+    test_msg = {
+        "id": "msg-sock-1",
+        "application_id": test_app_id,
+        "content": "Real-time deal message via Socket.IO",
+        "sender_name": "Priya Sharma (Apex Ventures)",
+        "sender_role": "investor"
+    }
+    # Should execute without throwing any exception
+    await broadcast_deal_message(test_app_id, test_msg)
+
+    # Test leaving deal room
+    leave_res = await handle_leave_deal_room(fake_sid, {"application_id": test_app_id})
+    assert leave_res["status"] == "ok"
+
 
 
 

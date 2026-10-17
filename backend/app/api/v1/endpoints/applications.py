@@ -516,9 +516,19 @@ async def send_deal_message(
         if data and len(data) > 0:
             msg_obj = DealMessageResponse(**{**msg_record, **data[0]})
             DEAL_MESSAGES_STORE.setdefault(application_id, []).append(msg_record)
+            try:
+                from app.core.socket_server import broadcast_deal_message
+                await broadcast_deal_message(application_id, msg_record)
+            except Exception:
+                pass
             return msg_obj
     except Exception as e:
         logger.debug(f"Deal message insert note: {e}")
 
     DEAL_MESSAGES_STORE.setdefault(application_id, []).append(msg_record)
+    try:
+        from app.core.socket_server import broadcast_deal_message
+        await broadcast_deal_message(application_id, msg_record)
+    except Exception:
+        pass
     return DealMessageResponse(**msg_record)

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Lock, ShieldCheck, Check, Building2 } from 'lucide-react';
 import { Button } from '../common/Button';
 import { api } from '../../lib/api';
+import { getSocket } from '../../lib/socket';
 import { FundingApplication, DealMessage } from '../../types';
 
 interface DealChatModalProps {
@@ -22,6 +23,7 @@ export const DealChatModal: React.FC<DealChatModalProps> = ({
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -41,9 +43,43 @@ export const DealChatModal: React.FC<DealChatModalProps> = ({
   };
 
   useEffect(() => {
+    // 1. Initial message load
     fetchMessages();
-    const interval = setInterval(fetchMessages, 3500);
-    return () => clearInterval(interval);
+
+    // 2. Connect to Socket.IO real-time channel
+    const socket = getSocket();
+    setIsSocketConnected(socket.connected);
+
+    const onConnect = () => setIsSocketConnected(true);
+    const onDisconnect = () => setIsSocketConnected(false);
+
+    // Join dedicated room for this specific deal application
+    socket.emit('join_deal_room', { application_id: application.id });
+
+    // Real-time instant incoming message handler
+    const onNewMessage = (newMsg: DealMessage) => {
+      if (newMsg && (newMsg.application_id === application.id || !newMsg.application_id)) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      }
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('deal_message', onNewMessage);
+
+    // Background safety poll (every 10s fallback)
+    const interval = setInterval(fetchMessages, 10000);
+
+    return () => {
+      socket.emit('leave_deal_room', { application_id: application.id });
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('deal_message', onNewMessage);
+      clearInterval(interval);
+    };
   }, [application.id]);
 
   useEffect(() => {
@@ -89,6 +125,21 @@ export const DealChatModal: React.FC<DealChatModalProps> = ({
                 </h3>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   Accepted
+                </span>
+                <span
+                  title={isSocketConnected ? 'Realtime Socket.IO connected' : 'Connecting to Socket.IO...'}
+                  className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-xs transition-colors ${
+                    isSocketConnected
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isSocketConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                    }`}
+                  />
+                  {isSocketConnected ? 'Socket.IO Live' : 'Connecting...'}
                 </span>
               </div>
               <p className="text-xs text-gray-300">

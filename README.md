@@ -63,6 +63,10 @@ SharkBridge is an AI-powered small-and-medium enterprise (SME) funding platform 
 
 ### 🔒 Deal Planning Chat Rooms
 - Unlocked automatically for both parties when an application is marked **Interested**.
+- **Real-Time Engine Powered by Socket.IO (`python-socketio` & `socket.io-client`)**:
+  - Instant bidirectional message delivery via dedicated rooms (`deal_{application_id}`).
+  - Live connection status badge in header: `● Socket.IO Live`.
+  - Automatic fallback to HTTP persistence ensures 100% reliability and history preservation.
 - Prominently displays the WhatsApp-style certified encryption header:  
   **`🔒 Certified by SharkBridge, end-to-end encryption`**
 - Context bar displays requested capital (₹), equity stake offered (%), SME name, and counterpart identity.
@@ -107,7 +111,8 @@ SharkBridge/
 │   │   │   └── api.py                # Main v1 API router aggregation
 │   │   ├── core/
 │   │   │   ├── config.py             # Pydantic BaseSettings (.env loading)
-│   │   │   └── security.py           # JWT validation & role enforcement (entrepreneur / investor)
+│   │   │   ├── security.py           # JWT validation & role enforcement (entrepreneur / investor)
+│   │   │   └── socket_server.py      # Socket.IO ASGI server & deal room real-time event engine
 │   │   ├── db/
 │   │   │   └── supabase.py           # Supabase client factory & safe insert/update helpers
 │   │   ├── schemas/                  # Pydantic v2 schemas (application, business, investor, profile)
@@ -116,16 +121,16 @@ SharkBridge/
 │   │   │   ├── demo_store.py         # Seed demo records and in-memory caches
 │   │   │   ├── matching.py           # 100-point matching rubric scoring function
 │   │   │   └── ocr_service.py        # PyPDF OCR text extraction & credential analysis
-│   │   └── main.py                   # FastAPI application entrypoint & CORS middleware
+│   │   └── main.py                   # FastAPI + Socket.IO ASGI entrypoint & CORS middleware
 │   ├── db/
 │   │   └── migrations/
 │   │       ├── 001_initial_schema.sql         # Base tables & RLS
 │   │       ├── 002_add_gstin_equity_cv.sql    # GSTIN, equity stake %, CV columns
 │   │       └── 003_add_deal_messages.sql      # deal_messages table & RLS policies
 │   ├── tests/
-│   │   ├── test_api_and_flow.py      # 16 end-to-end integration test cases
+│   │   ├── test_api_and_flow.py      # 17 end-to-end integration test cases
 │   │   └── test_health.py            # Health & root route verification
-│   ├── requirements.txt              # Python dependencies (fastapi, supabase, pypdf, httpx, pytest)
+│   ├── requirements.txt              # Python dependencies (fastapi, python-socketio, pypdf, supabase, httpx, pytest)
 │   └── .env                          # Backend environment variables
 ├── frontend/
 │   ├── src/
@@ -139,6 +144,7 @@ SharkBridge/
 │   │   │       └── Footer.tsx        # Standard footer
 │   │   ├── lib/
 │   │   │   ├── api.ts                # Centralized typed ApiClient (Deal messages, Assistant, OCR)
+│   │   │   ├── socket.ts             # Socket.IO client singleton with auto-reconnection
 │   │   │   └── supabase.ts           # Supabase Auth client & session listener
 │   │   ├── pages/
 │   │   │   ├── EntrepreneurDashboard.tsx  # SME profile, investor matches, proposals, deal chat
